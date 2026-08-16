@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         第一版主网（m.diyibanzhu.me）广告清理
 // @namespace    local.diyibanzhu.adblock
-// @version      1.0.0
+// @version      1.1.0
 // @description  清理第一版主网移动端底部广告：正文下方漫画推广广告条(#ad.slide) + 底部隐形点击劫持层(opacity:0.01 透明块)。document-start 注入，页面不先渲染后注入。
 // @author       local
 // @match        https://m.diyibanzhu.me/*
@@ -14,6 +14,75 @@
 
 function main() {
 	if (window.top !== window.self) return; // 只处理顶层页面
+
+	/* 0. 网络层拦截: 阻断广告服务器请求(XHR/fetch/script/iframe/window.open) */
+	var AD_HOST_RE = /(^|\.)(s503nvw|kpqppok|gewt00g)\.com(:\d+)?$/i;
+	var isAdUrl = function (u) {
+		if (!u) return false;
+		var s = String(u);
+		// 去掉协议/路径取 host
+		var m = s.match(/^[a-z]+:\/\/([^/?#]+)/i);
+		var host = m ? m[1] : s.split(/[\/?#]/)[0];
+		return AD_HOST_RE.test(host);
+	};
+	// XHR 拦截(广告配置通过 XHR 拉取)
+	try {
+		var _xhrOpen = XMLHttpRequest.prototype.open;
+		var _xhrSend = XMLHttpRequest.prototype.send;
+		XMLHttpRequest.prototype.open = function (method, url) {
+			this.__dybzBlocked = isAdUrl(url);
+			return _xhrOpen.apply(this, arguments);
+		};
+		XMLHttpRequest.prototype.send = function () {
+			if (this.__dybzBlocked) {
+				try { this.abort(); } catch (e) { /* ignore */ }
+				return;
+			}
+			return _xhrSend.apply(this, arguments);
+		};
+	} catch (e) { /* ignore */ }
+	// fetch 拦截
+	try {
+		var _fetch = window.fetch;
+		window.fetch = function (input, init) {
+			var u = typeof input === "string" ? input : (input && input.url) || "";
+			if (isAdUrl(u)) return Promise.reject(new TypeError("blocked by dybz-adblock"));
+			return _fetch.call(this, input, init);
+		};
+	} catch (e) { /* ignore */ }
+	// window.open 拦截(防弹出式广告窗口)
+	try {
+		var _winOpen = window.open;
+		window.open = function (url, name, features) {
+			if (isAdUrl(url)) return null;
+			return _winOpen.call(window, url, name, features);
+		};
+	} catch (e) { /* ignore */ }
+	// 动态创建的 script/iframe: 在 src setter 处拦截广告域名, 使其无法加载
+	try {
+		var _createElement = document.createElement.bind(document);
+		document.createElement = function (tag, options) {
+			var el = _createElement(tag, options);
+			var t = String(tag).toLowerCase();
+			if (t === "script" || t === "iframe") {
+				var desc = Object.getOwnPropertyDescriptor(
+					t === "script" ? HTMLScriptElement.prototype : HTMLIFrameElement.prototype,
+					"src"
+				);
+				if (desc && desc.set) {
+					Object.defineProperty(el, "src", {
+						get: function () { return desc.get.call(this); },
+						set: function (v) {
+							if (isAdUrl(v)) return; // 广告域名: 拒绝赋值, 不加载
+							return desc.set.call(this, v);
+						},
+						configurable: true
+					});
+				}
+			}
+			return el;
+		};
+	} catch (e) { /* ignore */ }
 
 	/* 1. 立即隐藏页面内容(纯色背景) + 广告 CSS 规则 */
 	var css = [
@@ -57,6 +126,14 @@ function main() {
 	}
 	function sweep() {
 		var i, list;
+		// 广告域名资源节点(脚本/iframe/图片/样式)
+		list = document.querySelectorAll('script[src], iframe[src], img[src], link[href]');
+		for (i = 0; i < list.length; i++) {
+			var el = list[i];
+			var u = el.src || el.href || "";
+			if (isAdUrl(u)) removeNode(el);
+		}
+		// 已知广告容器
 		list = document.querySelectorAll("#ad, .slide-ad");
 		for (i = 0; i < list.length; i++) removeNode(list[i]);
 		// 隐形点击层(内联样式特征 + 计算样式兜底)
