@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         51爆料网纯净模式（文章页去广告 + 首页去广告）
 // @namespace    local.fixtures.51baoliao-clean
-// @version      1.5.1
+// @version      1.5.2
 // @description  51爆料网全站去广告：视频页纯背景过渡、仅保留标题+视频（标题字体与导航页一致）；DPlayer 控制条新增下载按钮（AES-128 解密合并，支持取消与实时进度，优先另存为流式写盘、降级浏览器下载）；首页/列表页移除浮点广告(#adFloat)、列表广告卡片(article.ad-item)等，点击视频链接纯色遮罩过渡。兼容桌面与安卓移动端。
 // @author       local
 // @match        https://*.qprvlexj.com/*
@@ -9,7 +9,7 @@
 // @match        https://www.51baoliao01.com/*
 // @match        https://d1epqpoay27u74.cloudfront.net/*
 // @run-at       document-start
-// @grant        none
+// @grant        GM_download
 // @noframes
 // ==/UserScript==
 
@@ -490,14 +490,37 @@
                 btnText(btn, '已保存');
                 setTimeout(function () { btnIcon(btn); }, 2500);
             } else {
-                // 触发浏览器下载管理器（blob 瞬时完成，管理器显示完成项）
+                // 移动端部分浏览器拒绝 blob: 下载（仅支持 https），
+                // 优先用油猴 GM_download（扩展级下载通道，支持 blob/data）；
+                // 不可用时回退 a[download]。
                 try {
                     var a = document.createElement('a');
                     a.href = URL.createObjectURL(blob);
                     a.download = name;
-                    document.body.appendChild(a);
-                    a.click();
-                    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 3000);
+                    var fired = false;
+                    if (typeof GM_download === 'function') {
+                        try {
+                            GM_download({
+                                url: a.href,
+                                name: name,
+                                saveAs: false,
+                                onerror: function () {
+                                    if (!fired) { fired = true; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 3000); }
+                                }
+                            });
+                            fired = true;
+                            setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 60000);
+                        } catch (e) {
+                            fired = true;
+                            document.body.appendChild(a);
+                            a.click();
+                            setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 3000);
+                        }
+                    } else {
+                        document.body.appendChild(a);
+                        a.click();
+                        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 3000);
+                    }
                 } catch (e) {}
                 btnText(btn, '已下载');
                 setTimeout(function () { btnIcon(btn); }, 2500);
