@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         51爆料网纯净模式（文章页去广告 + 首页去广告）
 // @namespace    local.fixtures.51baoliao-clean
-// @version      1.5.2
+// @version      1.5.3
 // @description  51爆料网全站去广告：视频页纯背景过渡、仅保留标题+视频（标题字体与导航页一致）；DPlayer 控制条新增下载按钮（AES-128 解密合并，支持取消与实时进度，优先另存为流式写盘、降级浏览器下载）；首页/列表页移除浮点广告(#adFloat)、列表广告卡片(article.ad-item)等，点击视频链接纯色遮罩过渡。兼容桌面与安卓移动端。
 // @author       local
 // @match        https://*.qprvlexj.com/*
@@ -668,6 +668,18 @@
     startListGuard();
     if (!IS_ARTICLE) installClickShield();
     wireDownloadSink();
+
+    // bfcache 清理：点击视频链接时的全屏遮罩若残留会随页面进入往返缓存，
+    // 返回恢复时遮罩盖住全屏导致"空白页"。导航离开前移除，恢复时兜底再清一次。
+    window.addEventListener('pagehide', function () {
+        var m = document.getElementById(MASK_ID);
+        if (m) m.remove();
+    });
+    window.addEventListener('pageshow', function () {
+        var m = document.getElementById(MASK_ID);
+        if (m) m.remove();
+        removeTransitionCSS();
+    });
 
     var poll = setInterval(function () {
         sanitizePlayerConfig();
