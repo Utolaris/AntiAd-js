@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         51爆料网纯净模式（文章页去广告 + 首页去广告）
 // @namespace    local.fixtures.51baoliao-clean
-// @version      1.5.0
+// @version      1.5.1
 // @description  51爆料网全站去广告：视频页纯背景过渡、仅保留标题+视频（标题字体与导航页一致）；DPlayer 控制条新增下载按钮（AES-128 解密合并，支持取消与实时进度，优先另存为流式写盘、降级浏览器下载）；首页/列表页移除浮点广告(#adFloat)、列表广告卡片(article.ad-item)等，点击视频链接纯色遮罩过渡。兼容桌面与安卓移动端。
 // @author       local
 // @match        https://*.qprvlexj.com/*
@@ -395,22 +395,24 @@
                 if (dp.__51bl_tap) return;
                 dp.__51bl_tap = true;
 
-                // 同步移动端中央播放按钮的显隐（无论通过何种方式播放/暂停）
+                // 同步播放器 UI：播放时隐藏中央播放按钮与下载按钮，暂停时恢复
                 var v = dp.querySelector('video');
                 if (v && !v.__51bl_sync) {
                     v.__51bl_sync = true;
-                    var syncMobilePlay = function () {
+                    var syncUi = function () {
                         var mp = dp.querySelector('.dplayer-mobile-play');
-                        if (!mp) return;
+                        var dl = dp.querySelector('.dplayer-download-icon');
                         if (v.paused) {
-                            if (mp.style.display === 'none') mp.style.display = '';
+                            if (mp && mp.style.display === 'none') mp.style.display = '';
+                            if (dl && dl.style.display === 'none') dl.style.display = '';
                         } else {
-                            mp.style.display = 'none';
+                            if (mp) mp.style.display = 'none';
+                            if (dl) dl.style.display = 'none';
                         }
                     };
-                    v.addEventListener('play', syncMobilePlay);
-                    v.addEventListener('pause', syncMobilePlay);
-                    v.addEventListener('ended', syncMobilePlay);
+                    v.addEventListener('play', syncUi);
+                    v.addEventListener('pause', syncUi);
+                    v.addEventListener('ended', syncUi);
                 }
 
                 dp.addEventListener('click', function (e) {
