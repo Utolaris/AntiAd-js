@@ -1,0 +1,16 @@
+# 系统文件
+.DS_Store
+
+# 依赖
+node_modules/
+
+# 51baoliao 下载样本（可重新抓取）
+51baoliao-antiAD/work/crypt.key
+51baoliao-antiAD/work/seg0.ts
+51baoliao-antiAD/work/seg0_clear.ts
+51baoliao-antiAD/work/s.m3u8
+51baoliao-antiAD/work/downloaded.ts
+
+# 日志/缓存
+*.log
+.cache/

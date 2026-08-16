@@ -1,0 +1,16 @@
+# 依赖
+node_modules/
+
+# 下载样本（可随时重新抓取）
+work/crypt.key
+work/seg0.ts
+work/seg0_clear.ts
+work/s.m3u8
+work/downloaded.ts
+
+# 系统文件
+.DS_Store
+
+# 日志/缓存
+*.log
+.cache/
