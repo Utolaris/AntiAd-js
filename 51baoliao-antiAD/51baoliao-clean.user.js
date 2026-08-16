@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         51爆料网纯净模式（文章页去广告 + 首页去广告）
 // @namespace    local.fixtures.51baoliao-clean
-// @version      1.6.1
+// @version      1.6.2
 // @description  51爆料网全站去广告：视频页纯背景过渡、仅保留标题+视频（标题字体与导航页一致）；DPlayer 控制条新增下载按钮（AES-128 解密合并，支持取消与实时进度，优先另存为流式写盘、降级浏览器下载）；首页/列表页移除浮点广告(#adFloat)、列表广告卡片(article.ad-item)等，点击视频链接纯色遮罩过渡。兼容桌面与安卓移动端。
 // @author       local
 // @match        *://*/*
@@ -251,7 +251,9 @@
             // 控制条常驻显示：播放/触摸时 DPlayer 会隐藏控制条（display:none + opacity 0），
             // 强制保持可见，保证下载/设置/全屏按钮随时可点
             '#' + SHELL_ID + ' .dplayer .dplayer-controller, #' + SHELL_ID + ' .dplayer .dplayer-controller.dplayer-controller-hide{display:block!important;opacity:1!important;visibility:visible!important}',
-            '#' + SHELL_ID + ' .dplayer .dplayer-controller{pointer-events:auto!important}'
+            '#' + SHELL_ID + ' .dplayer .dplayer-controller{pointer-events:auto!important}',
+            // 全屏播放时隐藏控制条，暂停时显现（dplayer-fs-hide 由脚本按播放状态切换）
+            '#' + SHELL_ID + ' .dplayer.dplayer-fs-hide .dplayer-controller{display:none!important;opacity:0!important;visibility:hidden!important}'
         ].join('\n');
         shell.appendChild(style);
 
@@ -272,6 +274,7 @@
         startArticleGuard();
         installDownloadButtons();
         installTapPlay();
+        installFsAutoHide();
         return true;
     }
 
@@ -434,6 +437,39 @@
                         try { video.pause(); } catch (e3) {}
                     }
                 }, true);
+            })(list[i]);
+        }
+    }
+
+    // ============================================================
+    // 6c. 全屏模式：播放时自动隐藏控制条，暂停时显现
+    //     （非全屏保持常驻显示）
+    // ============================================================
+    function installFsAutoHide() {
+        var list = document.querySelectorAll('#' + SHELL_ID + ' .dplayer');
+        for (var i = 0; i < list.length; i++) {
+            (function (dp) {
+                if (dp.__51bl_fs) return;
+                dp.__51bl_fs = true;
+                var v = dp.querySelector('video');
+                if (!v) return;
+                var update = function () {
+                    var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+                    var isThisFs = !!fsEl && (fsEl === dp || fsEl.contains(dp) || dp.contains(fsEl));
+                    if (isThisFs) {
+                        // 全屏中：播放隐藏、暂停显现
+                        if (v.paused) dp.classList.remove('dplayer-fs-hide');
+                        else dp.classList.add('dplayer-fs-hide');
+                    } else {
+                        dp.classList.remove('dplayer-fs-hide');
+                    }
+                };
+                document.addEventListener('fullscreenchange', update);
+                document.addEventListener('webkitfullscreenchange', update);
+                v.addEventListener('play', update);
+                v.addEventListener('pause', update);
+                v.addEventListener('ended', update);
+                update();
             })(list[i]);
         }
     }
