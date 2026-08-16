@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         51爆料网纯净模式（文章页去广告 + 首页去广告）
 // @namespace    local.fixtures.51baoliao-clean
-// @version      1.6.2
+// @version      1.6.3
 // @description  51爆料网全站去广告：视频页纯背景过渡、仅保留标题+视频（标题字体与导航页一致）；DPlayer 控制条新增下载按钮（AES-128 解密合并，支持取消与实时进度，优先另存为流式写盘、降级浏览器下载）；首页/列表页移除浮点广告(#adFloat)、列表广告卡片(article.ad-item)等，点击视频链接纯色遮罩过渡。兼容桌面与安卓移动端。
 // @author       local
 // @match        *://*/*
@@ -453,9 +453,20 @@
                 dp.__51bl_fs = true;
                 var v = dp.querySelector('video');
                 if (!v) return;
+                // 仅"用户点击全屏按钮"才启用全屏自动隐藏；
+                // 部分 WebView（如 Via）在视频播放时会隐式触发 fullscreenchange，
+                // 不能据此判定用户主动全屏，否则非全屏播放也会隐藏控制条。
+                var userFs = false;
+                dp.addEventListener('click', function (e) {
+                    var t = e.target;
+                    if (t && t.closest && t.closest('.dplayer-full-icon, .dplayer-full-in-icon')) {
+                        userFs = true;
+                    }
+                }, true);
                 var update = function () {
                     var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
-                    var isThisFs = !!fsEl && (fsEl === dp || fsEl.contains(dp) || dp.contains(fsEl));
+                    if (!fsEl) userFs = false; // 已退出全屏
+                    var isThisFs = userFs && !!fsEl && (fsEl === dp || fsEl.contains(dp) || dp.contains(fsEl));
                     if (isThisFs) {
                         // 全屏中：播放隐藏、暂停显现
                         if (v.paused) dp.classList.remove('dplayer-fs-hide');
