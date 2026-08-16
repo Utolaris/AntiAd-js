@@ -1,14 +1,10 @@
 // ==UserScript==
 // @name         51爆料网纯净模式（文章页去广告 + 首页去广告）
 // @namespace    local.fixtures.51baoliao-clean
-// @version      1.5.5
+// @version      1.6.1
 // @description  51爆料网全站去广告：视频页纯背景过渡、仅保留标题+视频（标题字体与导航页一致）；DPlayer 控制条新增下载按钮（AES-128 解密合并，支持取消与实时进度，优先另存为流式写盘、降级浏览器下载）；首页/列表页移除浮点广告(#adFloat)、列表广告卡片(article.ad-item)等，点击视频链接纯色遮罩过渡。兼容桌面与安卓移动端。
 // @author       local
-// @match        https://*.qprvlexj.com/*
-// @match        https://*.rrvdjtsqc.cc/*
-// @match        https://*.ckoidelwg.cc/*
-// @match        https://www.51baoliao01.com/*
-// @match        https://d1epqpoay27u74.cloudfront.net/*
+// @match        *://*/*
 // @run-at       document-start
 // @grant        GM_download
 // @noframes
@@ -667,51 +663,112 @@
     // ============================================================
     // 启动
     // ============================================================
-    var startTime = Date.now();
-    if (IS_ARTICLE) injectTransitionCSS();
-    injectHideCSS();
-    injectPreHook();
-    sanitizePlayerConfig();
-    startListGuard();
-    if (!IS_ARTICLE) installClickShield();
-    wireDownloadSink();
-
-    // bfcache 清理：点击视频链接时的全屏遮罩若残留会随页面进入往返缓存，
-    // 返回恢复时遮罩盖住全屏导致"空白页"。导航离开前移除，恢复时兜底再清一次。
-    window.addEventListener('pagehide', function () {
-        var m = document.getElementById(MASK_ID);
-        if (m) m.remove();
-    });
-    window.addEventListener('pageshow', function () {
-        var m = document.getElementById(MASK_ID);
-        if (m) m.remove();
-        removeTransitionCSS();
-    });
-
-    var poll = setInterval(function () {
+    function boot51() {
+        try { window.__51bl_boot_ts = Date.now(); window.__51bl_boot_perf = performance.now(); } catch (e) {}
+        var startTime = Date.now();
+        if (IS_ARTICLE) injectTransitionCSS();
+        injectHideCSS();
+        injectPreHook();
         sanitizePlayerConfig();
-        try { cleanListPage(); } catch (e) {}
-        try { removePreRollAds(); } catch (e) {}
-        if (IS_ARTICLE && !built && rebuild()) clearInterval(poll);
-    }, 80);
-    setTimeout(function () {
-        clearInterval(poll);
-        try {
-            if (!rebuild()) removeTransitionCSS();
-        } catch (e) {
+        startListGuard();
+        if (!IS_ARTICLE) installClickShield();
+        wireDownloadSink();
+
+        // bfcache 清理：点击视频链接时的全屏遮罩若残留会随页面进入往返缓存，
+        // 返回恢复时遮罩盖住全屏导致"空白页"。导航离开前移除，恢复时兜底再清一次。
+        window.addEventListener('pagehide', function () {
+            var m = document.getElementById(MASK_ID);
+            if (m) m.remove();
+        });
+        window.addEventListener('pageshow', function () {
+            var m = document.getElementById(MASK_ID);
+            if (m) m.remove();
             removeTransitionCSS();
-        }
-    }, 16000);
+        });
 
-    window.addEventListener('load', function () {
-        sanitizePlayerConfig();
-        try { cleanListPage(); } catch (e) {}
+        var poll = setInterval(function () {
+            sanitizePlayerConfig();
+            try { cleanListPage(); } catch (e) {}
+            try { removePreRollAds(); } catch (e) {}
+            if (IS_ARTICLE && !built && rebuild()) clearInterval(poll);
+        }, 80);
         setTimeout(function () {
+            clearInterval(poll);
             try {
                 if (!rebuild()) removeTransitionCSS();
             } catch (e) {
                 removeTransitionCSS();
             }
-        }, 100);
-    });
+        }, 16000);
+
+        window.addEventListener('load', function () {
+            sanitizePlayerConfig();
+            try { cleanListPage(); } catch (e) {}
+            setTimeout(function () {
+                try {
+                    if (!rebuild()) removeTransitionCSS();
+                } catch (e) {
+                    removeTransitionCSS();
+                }
+            }, 100);
+        });
+    }
+
+    // 站点识别：51 爆料网会频繁更换镜像域名。
+    // 已知域组直接启动；未知域名用 MutationObserver 即时识别——
+    // 在 DOM 解析过程中（title/特征元素一插入）即触发，远早于页面渲染完成，
+    // 保证视频页过渡 CSS 等依然能在广告闪现前生效。
+    var KNOWN_HOST = /(^|\.)(qprvlexj\.com|rrvdjtsqc\.cc|ckoidelwg\.cc)$/i;
+    if (KNOWN_HOST.test(location.hostname) ||
+        location.hostname === 'www.51baoliao01.com' ||
+        location.hostname === 'd1epqpoay27u74.cloudfront.net') {
+        boot51();
+    } else {
+        var started51 = false;
+        var obs51 = null;
+        var bootOnce = function () {
+            if (started51) return;
+            started51 = true;
+            if (obs51) { try { obs51.disconnect(); } catch (e) {} }
+            boot51();
+        };
+        var check51 = function () {
+            var title = document.title || '';
+            if (/51爆料网|51baoliao/i.test(title)) return true;
+            if (/\/archives\/\d+/.test(location.pathname) && document.querySelector('.dplayer')) return true;
+            if (document.querySelector('#adFloat') && document.querySelector('.tjtagmanager')) return true;
+            if (document.querySelector('article.ad-item') && document.querySelector('.xqbj-component-adfloat')) return true;
+            return false;
+        };
+        // 立即检查（document-start 时 title 可能尚未解析，但路径特征可先判）
+        if (check51()) { bootOnce(); }
+        else {
+            var watch51 = function () {
+                if (document.documentElement && !obs51) {
+                    obs51 = new MutationObserver(function () {
+                        if (check51()) bootOnce();
+                    });
+                    obs51.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+                    if (check51()) bootOnce();
+                }
+            };
+            watch51();
+            var waitRoot51 = setInterval(function () {
+                if (document.documentElement) {
+                    clearInterval(waitRoot51);
+                    watch51();
+                    if (check51()) bootOnce();
+                }
+            }, 5);
+            // 兜底：页面加载完成后仍未识别则放弃（不干扰其他网站）
+            window.addEventListener('load', function () {
+                setTimeout(function () {
+                    if (!started51) {
+                        if (check51()) bootOnce();
+                        if (obs51) { try { obs51.disconnect(); } catch (e) {} }
+                    }
+                }, 300);
+            });
+        }
+    }
 })();
