@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         51爆料网纯净模式（文章页去广告 + 首页去广告）
 // @namespace    local.fixtures.51baoliao-clean
-// @version      1.4.8
+// @version      1.4.9
 // @description  51爆料网全站去广告：视频页纯背景过渡、仅保留标题+视频（标题字体与导航页一致）；DPlayer 控制条新增下载按钮（AES-128 解密合并，支持取消与实时进度，优先另存为流式写盘、降级浏览器下载）；首页/列表页移除浮点广告(#adFloat)、列表广告卡片(article.ad-item)等，点击视频链接纯色遮罩过渡。兼容桌面与安卓移动端。
 // @author       local
 // @match        https://*.qprvlexj.com/*
+// @match        https://*.rrvdjtsqc.cc/*
 // @match        https://www.51baoliao01.com/*
 // @match        https://d1epqpoay27u74.cloudfront.net/*
 // @run-at       document-start
@@ -112,6 +113,24 @@
                         };
                     }
                 });
+            } catch (e) {}
+            // 屏蔽导航页的原生询问弹窗（广告 confirm/alert 等）
+            try { window.alert = function () {}; } catch (e) {}
+            try { window.confirm = function () { return false; }; } catch (e) {}
+            try { window.prompt = function () { return null; }; } catch (e) {}
+            // 从源头拦截 "AI科技" 广告体系脚本（浮点广告/中转弹窗），
+            // 这些脚本会动态创建浮标与弹窗并引导到登录/中转页
+            try {
+                var obsAd = new MutationObserver(function (muts) {
+                    muts.forEach(function (m) {
+                        m.addedNodes.forEach(function (n) {
+                            if (n && n.tagName === 'SCRIPT' && n.src && /adfloat-entry|index-ai/.test(n.src)) {
+                                n.remove();
+                            }
+                        });
+                    });
+                });
+                if (document.documentElement) obsAd.observe(document.documentElement, { childList: true, subtree: true });
             } catch (e) {}
         }.toString() + ')();';
         appendRoot(s);
