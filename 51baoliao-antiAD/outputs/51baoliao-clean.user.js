@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         51爆料网纯净模式（文章页去广告 + 首页去广告）
 // @namespace    local.fixtures.51baoliao-clean
-// @version      1.4.9
+// @version      1.5.0
 // @description  51爆料网全站去广告：视频页纯背景过渡、仅保留标题+视频（标题字体与导航页一致）；DPlayer 控制条新增下载按钮（AES-128 解密合并，支持取消与实时进度，优先另存为流式写盘、降级浏览器下载）；首页/列表页移除浮点广告(#adFloat)、列表广告卡片(article.ad-item)等，点击视频链接纯色遮罩过渡。兼容桌面与安卓移动端。
 // @author       local
 // @match        https://*.qprvlexj.com/*
@@ -394,15 +394,40 @@
             (function (dp) {
                 if (dp.__51bl_tap) return;
                 dp.__51bl_tap = true;
+
+                // 同步移动端中央播放按钮的显隐（无论通过何种方式播放/暂停）
+                var v = dp.querySelector('video');
+                if (v && !v.__51bl_sync) {
+                    v.__51bl_sync = true;
+                    var syncMobilePlay = function () {
+                        var mp = dp.querySelector('.dplayer-mobile-play');
+                        if (!mp) return;
+                        if (v.paused) {
+                            if (mp.style.display === 'none') mp.style.display = '';
+                        } else {
+                            mp.style.display = 'none';
+                        }
+                    };
+                    v.addEventListener('play', syncMobilePlay);
+                    v.addEventListener('pause', syncMobilePlay);
+                    v.addEventListener('ended', syncMobilePlay);
+                }
+
                 dp.addEventListener('click', function (e) {
                     var t = e.target;
                     if (!t || !t.closest) return;
                     // 控制条/下载按钮/进度条/设置/全屏/弹幕等交互区不触发
                     if (t.closest('.dplayer-controller, .dplayer-download-icon, .dplayer-mobile-play, .dplayer-setting, .dplayer-full, .dplayer-comment, .dplayer-bar-wrap, .dplayer-mask, .dplayer-video-wrap .dplayer-icon')) return;
-                    var v = dp.querySelector('video');
-                    if (!v) return;
-                    if (v.paused) { try { v.play(); } catch (e2) {} }
-                    else { try { v.pause(); } catch (e2) {} }
+                    var video = dp.querySelector('video');
+                    if (!video) return;
+                    if (video.paused) {
+                        // 优先走 DPlayer 原生播放按钮（触发其内部状态机，按钮自动隐藏）
+                        var mpBtn = dp.querySelector('.dplayer-mobile-play');
+                        if (mpBtn && mpBtn.style.display !== 'none') { try { mpBtn.click(); } catch (e3) {} }
+                        else { try { video.play(); } catch (e3) {} }
+                    } else {
+                        try { video.pause(); } catch (e3) {}
+                    }
                 }, true);
             })(list[i]);
         }
